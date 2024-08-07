@@ -5,6 +5,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{cell::Cell, fmt::Debug};
 use syn::{
     parse::{Parse, ParseStream},
@@ -41,6 +42,9 @@ impl ToTokens for CallBody {
     }
 }
 
+// Make sure that all CallBodies have unique idx-es
+static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 impl CallBody {
     /// Create a new CallBody from a TemplateBody
     ///
@@ -48,7 +52,7 @@ impl CallBody {
     pub fn new(body: TemplateBody) -> Self {
         let body = CallBody {
             body,
-            template_idx: Cell::new(0),
+            template_idx: Cell::new(COUNTER.fetch_add(1, Ordering::SeqCst)),
         };
 
         body.body.template_idx.set(body.next_template_idx());
