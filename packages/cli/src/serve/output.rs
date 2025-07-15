@@ -29,7 +29,7 @@ use tracing::Level;
 use super::AppServer;
 
 const TICK_RATE_MS: u64 = 100;
-const VIEWPORT_MAX_WIDTH: u16 = 100;
+const VIEWPORT_MAX_WIDTH: u16 = 90;
 const VIEWPORT_HEIGHT_SMALL: u16 = 5;
 const VIEWPORT_HEIGHT_BIG: u16 = 13;
 
@@ -165,7 +165,7 @@ impl Output {
     }
 
     pub(crate) fn remote_shutdown(interactive: bool) -> io::Result<()> {
-        if interactive {
+        if interactive && crossterm::terminal::is_raw_mode_enabled().unwrap_or(true) {
             stdout()
                 .execute(Show)?
                 .execute(DisableFocusChange)?
@@ -204,7 +204,7 @@ impl Output {
                 Ok(Some(update)) => return update,
                 Err(ee) => {
                     return ServeUpdate::Exit {
-                        error: Some(Box::new(ee)),
+                        error: Some(anyhow::anyhow!(ee)),
                     }
                 }
                 Ok(None) => {}
@@ -675,7 +675,7 @@ impl Output {
                 if client.build.platform == Platform::Web {
                     "Serving at: ".gray()
                 } else {
-                    "ServerFns at: ".gray()
+                    "Server at: ".gray()
                 },
                 address,
             ])),
@@ -766,21 +766,23 @@ impl Output {
         let links_list: [_; 2] =
             Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(bottom);
 
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                "Read the docs: ".gray(),
-                "https://dioxuslabs.com/0.6/docs".blue(),
-            ])),
-            links_list[0],
-        );
+        if state.runner.client.build.using_dioxus_explicitly {
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    "Read the docs: ".gray(),
+                    "https://dioxuslabs.com/0.6/docs".blue(),
+                ])),
+                links_list[0],
+            );
 
-        frame.render_widget(
-            Paragraph::new(Line::from(vec![
-                "Video tutorials: ".gray(),
-                "https://youtube.com/@DioxusLabs".blue(),
-            ])),
-            links_list[1],
-        );
+            frame.render_widget(
+                Paragraph::new(Line::from(vec![
+                    "Video tutorials: ".gray(),
+                    "https://youtube.com/@DioxusLabs".blue(),
+                ])),
+                links_list[1],
+            );
+        }
 
         let cmds = [
             "",
