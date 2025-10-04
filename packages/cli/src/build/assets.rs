@@ -293,9 +293,14 @@ fn find_wasm_symbol_offsets<'a, R: ReadRef<'a>>(
 
 /// Find all assets in the given file, hash them, and write them back to the file.
 /// Then return an `AssetManifest` containing all the assets found in the file.
-pub(crate) fn extract_assets_from_file(path: impl AsRef<Path>) -> Result<AssetManifest> {
+pub(crate) async fn extract_assets_from_file(path: impl AsRef<Path>) -> Result<AssetManifest> {
     let path = path.as_ref();
-    let mut file = std::fs::File::options().write(true).read(true).open(path)?;
+    let mut file = open_file_for_writing_with_timeout(
+        path,
+        std::fs::OpenOptions::new().write(true).read(true),
+    )
+    .await?;
+
     let mut file_contents = Vec::new();
     file.read_to_end(&mut file_contents)?;
     let mut reader = Cursor::new(&file_contents);
@@ -315,7 +320,10 @@ pub(crate) fn extract_assets_from_file(path: impl AsRef<Path>) -> Result<AssetMa
 
         if let Some((_, bundled_asset)) = const_serialize::deserialize_const!(BundledAsset, buffer)
         {
-            tracing::debug!("Found asset at offset {offset}: {:?}", bundled_asset);
+            tracing::debug!(
+                "Found asset at offset {offset}: {:?}",
+                bundled_asset.absolute_source_path()
+            );
             assets.push(bundled_asset);
         } else {
             tracing::warn!("Found an asset at offset {offset} that could not be deserialized. This may be caused by a mismatch between your dioxus and dioxus-cli versions.");
@@ -337,19 +345,21 @@ pub(crate) fn extract_assets_from_file(path: impl AsRef<Path>) -> Result<AssetMa
         // Write the modified binary data back to the file
         file.write_all(new_data.as_ref())?;
     }
+
     // Ensure the file is flushed to disk
     file.sync_all()
         .context("Failed to sync file after writing assets")?;
 
     // If the file is a macos binary, we need to re-sign the modified binary
-    if object_file.format() == object::BinaryFormat::MachO {
+    if object_file.format() == object::BinaryFormat::MachO && !assets.is_empty() {
         // Spawn the codesign command to re-sign the binary
         let output = std::process::Command::new("codesign")
             .arg("--force")
             .arg("--sign")
             .arg("-") // Sign with an empty identity
             .arg(path)
-            .output()?;
+            .output()
+            .context("Failed to run codesign - is `codesign` in your path?")?;
 
         if !output.status.success() {
             bail!(
@@ -366,4 +376,31 @@ pub(crate) fn extract_assets_from_file(path: impl AsRef<Path>) -> Result<AssetMa
     }
 
     Ok(manifest)
+}
+
+/// Try to open a file for writing, retrying if the file is already open by another process.
+///
+/// This is useful on windows where antivirus software might grab the executable before we have a chance to read it.
+async fn open_file_for_writing_with_timeout(
+    file: &Path,
+    options: &mut std::fs::OpenOptions,
+) -> Result<std::fs::File> {
+    let start_time = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(5);
+    loop {
+        match options.open(file) {
+            Ok(file) => return Ok(file),
+            Err(e) => {
+                if cfg!(windows) && e.raw_os_error() == Some(32) && start_time.elapsed() < timeout {
+                    // File is already open, wait and retry
+                    tracing::trace!(
+                        "Failed to open file because another process is using it. Retrying..."
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                } else {
+                    return Err(e.into());
+                }
+            }
+        }
+    }
 }

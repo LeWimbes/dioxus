@@ -26,12 +26,15 @@ dioxus-dx-wire-format = { workspace = true }
 wasm-split-cli = { workspace = true }
 depinfo = { workspace = true }
 subsecond-types = { workspace = true }
+dioxus-cli-telemetry = { workspace =  true }
 
 clap = { workspace = true, features = ["derive", "cargo"] }
 convert_case = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
-serde = { workspace = true, features = ["derive"] }
+# swc uses serde internals that break with newer versions of serde. We should move off of swc eventually,
+# but pinning serde fixes the issue in the meantime
+serde = { version = "=1.0.221", features = ["derive"] }
 serde_json = { workspace = true }
 toml = { workspace = true }
 cargo_toml = { workspace = true, features = ["features"] }
@@ -154,6 +157,11 @@ self_update = { version = "0.42.0", features = [
 ] }
 self-replace = "1.5.0"
 cargo-config2 = { workspace = true }
+posthog-rs = "0.3.5"
+serde_json5 = "0.2.1"
+fs2 = "0.4.3"
+sentry-backtrace = "0.42.0"
+nucleo = "0.5.0"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }
@@ -162,6 +170,7 @@ built = { version = "0.8.0", features = ["git2"] }
 default = []
 tokio-console = ["dep:console-subscriber", "tokio/tracing"]
 no-downloads = []
+disable-telemetry = []
 
 [[bin]]
 path = "src/main.rs"

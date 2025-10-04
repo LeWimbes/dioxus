@@ -2,7 +2,11 @@
 
 use std::fmt::Debug;
 
-use dioxus_lib::prelude::*;
+use dioxus_core::{Attribute, Element, EventHandler, VNode};
+use dioxus_core_macro::{rsx, Props};
+use dioxus_html::{
+    self as dioxus_elements, ModifiersInteraction, MountedEvent, MouseEvent, PointerInteraction,
+};
 
 use tracing::error;
 
@@ -91,7 +95,6 @@ impl Debug for LinkProps {
 /// # Example
 /// ```rust
 /// # use dioxus::prelude::*;
-/// # use dioxus_router::prelude::*;
 ///
 /// #[derive(Clone, Routable)]
 /// enum Route {
@@ -205,6 +208,11 @@ pub fn Link(props: LinkProps) -> Element {
         }
         // Only handle left clicks
         if event.trigger_button() != Some(dioxus_elements::input_data::MouseButton::Primary) {
+            return;
+        }
+
+        // If we need to open in a new tab, let the browser handle it
+        if new_tab {
             return;
         }
 

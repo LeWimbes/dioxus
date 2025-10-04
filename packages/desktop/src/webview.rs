@@ -4,14 +4,9 @@ use crate::menubar::DioxusMenu;
 use crate::PendingDesktopContext;
 use crate::WindowCloseBehaviour;
 use crate::{
-    app::SharedContext,
-    assets::AssetHandlerRegistry,
-    edits::WryQueue,
-    file_upload::{NativeFileEngine, NativeFileHover},
-    ipc::UserWindowEvent,
-    protocol,
-    waker::tao_waker,
-    Config, DesktopContext, DesktopService,
+    app::SharedContext, assets::AssetHandlerRegistry, edits::WryQueue,
+    file_upload::NativeFileHover, ipc::UserWindowEvent, protocol, waker::tao_waker, Config,
+    DesktopContext, DesktopService,
 };
 use crate::{document::DesktopDocument, WeakDesktopContext};
 use base64::prelude::BASE64_STANDARD;
@@ -19,9 +14,9 @@ use dioxus_core::{Runtime, ScopeId, VirtualDom};
 use dioxus_document::Document;
 use dioxus_history::{History, MemoryHistory};
 use dioxus_hooks::to_owned;
-use dioxus_html::{HasFileData, HtmlEvent, PlatformEventData};
+use dioxus_html::{HtmlEvent, PlatformEventData};
 use futures_util::{pin_mut, FutureExt};
-use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::{cell::OnceCell, time::Duration};
 use std::{rc::Rc, task::Waker};
 use wry::{DragDropEvent, RequestAsyncResponder, WebContext, WebViewBuilder, WebViewId};
@@ -89,7 +84,7 @@ impl WebviewEdits {
             }
             Err(err) => {
                 tracing::error!(
-                    "Error parsing user_event: {:?}.Contents: {:?}, raw: {:#?}",
+                    "Error parsing user_event: {:?}. \n Contents: {:?}, \nraw: {:#?}",
                     err,
                     String::from_utf8(request.body().to_vec()),
                     request
@@ -130,20 +125,17 @@ impl WebviewEdits {
             }
             dioxus_html::EventData::Drag(ref drag) => {
                 // we want to override this with a native file engine, provided by the most recent drag event
-                if drag.files().is_some() {
-                    let file_event = recent_file.current().unwrap();
-                    let paths = match file_event {
-                        wry::DragDropEvent::Enter { paths, .. } => paths,
-                        wry::DragDropEvent::Drop { paths, .. } => paths,
-                        _ => vec![],
-                    };
-                    Rc::new(PlatformEventData::new(Box::new(DesktopFileDragEvent {
-                        mouse: drag.mouse.clone(),
-                        files: Arc::new(NativeFileEngine::new(paths)),
-                    })))
-                } else {
-                    data.into_any()
-                }
+                let file_event = recent_file.current().unwrap();
+                let paths = match file_event {
+                    wry::DragDropEvent::Enter { paths, .. } => paths,
+                    wry::DragDropEvent::Drop { paths, .. } => paths,
+                    _ => vec![],
+                };
+
+                Rc::new(PlatformEventData::new(Box::new(DesktopFileDragEvent {
+                    mouse: drag.mouse.clone(),
+                    files: paths,
+                })))
             }
             _ => data.into_any(),
         };
@@ -300,6 +292,8 @@ impl WebviewInstance {
             }
         };
 
+        let page_loaded = AtomicBool::new(false);
+
         let mut webview = WebViewBuilder::new_with_web_context(&mut web_context)
             .with_bounds(wry::Rect {
                 position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),
@@ -311,11 +305,16 @@ impl WebviewInstance {
             .with_transparent(cfg.window.window.transparent)
             .with_url("dioxus://index.html/")
             .with_ipc_handler(ipc_handler)
-            .with_navigation_handler(|var| {
+            .with_navigation_handler(move |var| {
                 // We don't want to allow any navigation
                 // We only want to serve the index file and assets
-                if var.starts_with("dioxus://") || var.starts_with("http://dioxus.") {
-                    true
+                if var.starts_with("dioxus://")
+                    || var.starts_with("http://dioxus.")
+                    || var.starts_with("https://dioxus.")
+                {
+                    // After the page has loaded once, don't allow any more navigation
+                    let page_loaded = page_loaded.swap(true, std::sync::atomic::Ordering::SeqCst);
+                    !page_loaded
                 } else {
                     if var.starts_with("http://")
                         || var.starts_with("https://")
@@ -327,6 +326,14 @@ impl WebviewInstance {
                 }
             }) // prevent all navigations
             .with_asynchronous_custom_protocol(String::from("dioxus"), request_handler);
+
+        // Enable https scheme on android, needed for secure context API, like the geolocation API
+        #[cfg(target_os = "android")]
+        {
+            use wry::WebViewBuilderExtAndroid as _;
+
+            webview = webview.with_https_scheme(true);
+        };
 
         // Disable the webview default shortcuts to disable the reload shortcut
         #[cfg(target_os = "windows")]
@@ -545,12 +552,12 @@ impl SynchronousEventResponse {
 pub(crate) struct PendingWebview {
     dom: VirtualDom,
     cfg: Config,
-    sender: tokio::sync::oneshot::Sender<DesktopContext>,
+    sender: futures_channel::oneshot::Sender<DesktopContext>,
 }
 
 impl PendingWebview {
     pub(crate) fn new(dom: VirtualDom, cfg: Config) -> (Self, PendingDesktopContext) {
-        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (sender, receiver) = futures_channel::oneshot::channel();
         let webview = Self { dom, cfg, sender };
         let pending = PendingDesktopContext { receiver };
         (webview, pending)

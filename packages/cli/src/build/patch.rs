@@ -775,7 +775,7 @@ pub fn create_undefined_symbol_stub(
     let mut defined_symbols = HashSet::new();
 
     for path in sorted {
-        let bytes = std::fs::read(path).with_context(|| format!("failed to read {:?}", path))?;
+        let bytes = std::fs::read(path).with_context(|| format!("failed to read {path:?}"))?;
         let file = File::parse(bytes.deref() as &[u8])?;
         for symbol in file.symbols() {
             if symbol.is_undefined() {
@@ -853,7 +853,7 @@ pub fn create_undefined_symbol_stub(
     if aslr_reference < aslr_ref_address {
         return Err(PatchError::InvalidModule(
             format!(
-            "ASLR reference is less than the main module's address - is there a `main`?. {:x} < {:x}", aslr_reference, aslr_ref_address )
+            "ASLR reference is less than the main module's address - is there a `main`?. {aslr_reference:x} < {aslr_ref_address:x}" )
         ));
     }
 
@@ -1191,6 +1191,8 @@ pub fn prepare_wasm_base_module(bytes: &[u8]) -> Result<Vec<u8>> {
         })
         .collect::<HashMap<_, _>>();
 
+    let mut exported = HashSet::new();
+
     // Wasm-bindgen will synthesize imports to satisfy its external calls. This facilitates things
     // like inline-js, snippets, and literally the `#[wasm_bindgen]` macro. All calls to JS are
     // just `extern "wbg"` blocks!
@@ -1227,9 +1229,10 @@ pub fn prepare_wasm_base_module(bytes: &[u8]) -> Result<Vec<u8>> {
 
             let new_func_id = module.funcs.add_local(builder.local_func(locals));
 
-            module
-                .exports
-                .add(&format!("__saved_wbg_{}", import.name), new_func_id);
+            let saved_name = format!("__saved_wbg_{}", import.name);
+            if exported.insert(saved_name.clone()) {
+                module.exports.add(&saved_name, new_func_id);
+            }
 
             make_indirect.push(new_func_id);
         }
@@ -1254,9 +1257,10 @@ pub fn prepare_wasm_base_module(bytes: &[u8]) -> Result<Vec<u8>> {
         //
         // https://github.com/rustwasm/wasm-bindgen/blob/c35cc9369d5e0dc418986f7811a0dd702fb33ef9/crates/cli-support/src/wit/mod.rs#L1505
         if name.starts_with("__wbindgen") {
-            module
-                .exports
-                .add(&format!("__saved_wbg_{name}"), func.id());
+            let saved_name = format!("__saved_wbg_{}", name);
+            if exported.insert(saved_name.clone()) {
+                module.exports.add(&saved_name, func.id());
+            }
         }
 
         // This is basically `--export-all` but designed to work around wasm-bindgen not properly gc-ing
@@ -1329,7 +1333,7 @@ fn name_is_bindgen_symbol(name: &str) -> bool {
 /// We need to do this for data symbols because walrus doesn't provide the right range and offset
 /// information for data segments. Fortunately, it provides it for code sections, so we only need to
 /// do a small amount extra of parsing here.
-fn parse_bytes_to_data_segment(bytes: &[u8]) -> Result<RawDataSection> {
+fn parse_bytes_to_data_segment(bytes: &[u8]) -> Result<RawDataSection<'_>> {
     let parser = wasmparser::Parser::new(0);
     let mut parser = parser.parse_all(bytes);
     let mut segments = vec![];
@@ -1441,7 +1445,7 @@ struct ParsedModule<'a> {
 
 /// Parse a module and return the mapping of index to FunctionID.
 /// We'll use this mapping to remap ModuleIDs
-fn parse_module_with_ids(bindgened: &[u8]) -> Result<ParsedModule> {
+fn parse_module_with_ids(bindgened: &[u8]) -> Result<ParsedModule<'_>> {
     let ids = Arc::new(RwLock::new(Vec::new()));
     let ids_ = ids.clone();
     let module = Module::from_buffer_with_config(

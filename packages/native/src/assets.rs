@@ -33,12 +33,14 @@ impl NetProvider<Resource> for DioxusNativeNetProvider {
         handler: blitz_traits::net::BoxedHandler<Resource>,
     ) {
         if request.url.scheme() == "dioxus" {
-            match dioxus_asset_resolver::serve_asset(request.url.path()) {
+            match dioxus_asset_resolver::native::serve_asset(request.url.path()) {
                 Ok(res) => {
+                    #[cfg(feature = "tracing")]
                     tracing::trace!("fetching asset  from file system success {request:#?}");
                     handler.bytes(doc_id, res.into_body().into(), self.callback.clone())
                 }
                 Err(_) => {
+                    #[cfg(feature = "tracing")]
                     tracing::warn!("fetching asset  from file system error {request:#?}");
                 }
             }

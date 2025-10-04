@@ -1,5 +1,4 @@
-use dioxus_core::prelude::use_hook;
-use dioxus_core::prelude::Callback;
+use dioxus_core::{use_hook, Callback};
 
 /// Create a callback that's always up to date. Whenever this hook is called the inner callback will be replaced with the new callback but the handle will remain.
 ///
@@ -12,7 +11,13 @@ pub fn use_callback<T: 'static, O: 'static>(f: impl FnMut(T) -> O + 'static) -> 
 
     // Create a copyvalue with no contents
     // This copyvalue is generic over F so that it can be sized properly
-    let mut inner = use_hook(|| Callback::new(callback.take().unwrap()));
+    let mut inner = use_hook(|| {
+        Callback::new(
+            callback
+                .take()
+                .expect("Callback cannot be None on first call"),
+        )
+    });
 
     if let Some(callback) = callback.take() {
         // Every time this hook is called replace the inner callback with the new callback

@@ -8,7 +8,7 @@ use crate::{
     webview::PendingWebview,
     AssetRequest, Config, WindowCloseBehaviour, WryEventHandler,
 };
-use dioxus_core::{prelude::Callback, VirtualDom};
+use dioxus_core::{Callback, VirtualDom};
 use std::{
     cell::Cell,
     future::{Future, IntoFuture},
@@ -31,7 +31,7 @@ use tao::platform::ios::WindowExtIOS;
 ///
 /// This function will panic if it is called outside of the context of a Dioxus App.
 pub fn window() -> DesktopContext {
-    dioxus_core::prelude::consume_context()
+    dioxus_core::consume_context()
 }
 
 /// A handle to the [`DesktopService`] that can be passed around.
@@ -354,7 +354,7 @@ fn is_main_thread() -> bool {
 /// # }
 /// ```
 pub struct PendingDesktopContext {
-    pub(crate) receiver: tokio::sync::oneshot::Receiver<DesktopContext>,
+    pub(crate) receiver: futures_channel::oneshot::Receiver<DesktopContext>,
 }
 
 impl PendingDesktopContext {
@@ -366,9 +366,7 @@ impl PendingDesktopContext {
     }
 
     /// Try to resolve the pending context into a [`DesktopContext`].
-    pub async fn try_resolve(
-        self,
-    ) -> Result<DesktopContext, tokio::sync::oneshot::error::RecvError> {
+    pub async fn try_resolve(self) -> Result<DesktopContext, futures_channel::oneshot::Canceled> {
         self.receiver.await
     }
 }

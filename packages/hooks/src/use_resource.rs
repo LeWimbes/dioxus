@@ -1,9 +1,16 @@
 #![allow(missing_docs)]
 
-use crate::{use_callback, use_signal};
-use dioxus_core::prelude::*;
+use crate::{use_callback, use_signal, use_waker, UseWaker};
+
+use dioxus_core::{
+    spawn, use_hook, Callback, IntoAttributeValue, IntoDynNode, ReactiveContext, RenderError,
+    Subscribers, SuspendedFuture, Task,
+};
 use dioxus_signals::*;
-use futures_util::{future, pin_mut, FutureExt, StreamExt};
+use futures_util::{
+    future::{self},
+    pin_mut, FutureExt, StreamExt,
+};
 use std::ops::Deref;
 use std::{cell::Cell, future::Future, rc::Rc};
 
@@ -12,7 +19,6 @@ use std::{cell::Cell, future::Future, rc::Rc};
 #[doc = include_str!("../docs/moving_state_around.md")]
 #[doc(alias = "use_async_memo")]
 #[doc(alias = "use_memo_async")]
-#[must_use = "Consider using `cx.spawn` to run a future without reading its value"]
 #[track_caller]
 pub fn use_resource<T, F>(mut future: impl FnMut() -> F + 'static) -> Resource<T>
 where
@@ -27,6 +33,8 @@ where
         let (rc, changed) = ReactiveContext::new_with_origin(location);
         (rc, Rc::new(Cell::new(Some(changed))))
     });
+
+    let mut waker = use_waker::<()>();
 
     let cb = use_callback(move |_| {
         // Set the state to Pending when the task is restarted
@@ -54,6 +62,9 @@ where
             // Set the value and state
             state.set(UseResourceState::Ready);
             value.set(Some(res));
+
+            // Notify that the value has changed
+            waker.wake(());
         })
     });
 
@@ -79,6 +90,7 @@ where
         task,
         value,
         state,
+        waker,
         callback: cb,
     }
 }
@@ -110,6 +122,7 @@ where
 /// ```
 #[derive(Debug)]
 pub struct Resource<T: 'static> {
+    waker: UseWaker<()>,
     value: Signal<Option<T>>,
     task: Signal<Task>,
     state: Signal<UseResourceState>,
@@ -345,7 +358,7 @@ impl<T> Resource<T> {
         )
     }
 
-    /// Get the current state of the resource's future. This method returns a [`ReadOnlySignal`] which can be read to get the current state of the resource or passed to other hooks and components.
+    /// Get the current state of the resource's future. This method returns a [`ReadSignal`] which can be read to get the current state of the resource or passed to other hooks and components.
     ///
     /// ## Example
     /// ```rust, no_run
@@ -375,11 +388,11 @@ impl<T> Resource<T> {
     ///     }
     /// }
     /// ```
-    pub fn state(&self) -> ReadOnlySignal<UseResourceState> {
+    pub fn state(&self) -> ReadSignal<UseResourceState> {
         self.state.into()
     }
 
-    /// Get the current value of the resource's future.  This method returns a [`ReadOnlySignal`] which can be read to get the current value of the resource or passed to other hooks and components.
+    /// Get the current value of the resource's future.  This method returns a [`ReadSignal`] which can be read to get the current value of the resource or passed to other hooks and components.
     ///
     /// ## Example
     ///
@@ -406,12 +419,12 @@ impl<T> Resource<T> {
     ///     }
     /// }
     /// ```
-    pub fn value(&self) -> ReadOnlySignal<Option<T>> {
+    pub fn value(&self) -> ReadSignal<Option<T>> {
         self.value.into()
     }
 
     /// Suspend the resource's future and only continue rendering when the future is ready
-    pub fn suspend(&self) -> std::result::Result<MappedSignal<T>, RenderError> {
+    pub fn suspend(&self) -> std::result::Result<MappedSignal<T, Signal<Option<T>>>, RenderError> {
         match self.state.cloned() {
             UseResourceState::Stopped | UseResourceState::Paused | UseResourceState::Pending => {
                 let task = self.task();
@@ -426,7 +439,7 @@ impl<T> Resource<T> {
     }
 }
 
-impl<T> From<Resource<T>> for ReadOnlySignal<Option<T>> {
+impl<T> From<Resource<T>> for ReadSignal<Option<T>> {
     fn from(val: Resource<T>) -> Self {
         val.value.into()
     }
@@ -448,6 +461,10 @@ impl<T> Readable for Resource<T> {
         &self,
     ) -> Result<ReadableRef<'static, Self>, generational_box::BorrowError> {
         self.value.try_peek_unchecked()
+    }
+
+    fn subscribers(&self) -> Subscribers {
+        self.value.subscribers()
     }
 }
 
@@ -476,6 +493,20 @@ impl<T: Clone> Deref for Resource<T> {
     type Target = dyn Fn() -> Option<T>;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { Readable::deref_impl(self) }
+        unsafe { ReadableExt::deref_impl(self) }
+    }
+}
+
+impl<T> std::future::Future for Resource<T> {
+    type Output = ();
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match self.waker.clone().poll_unpin(cx) {
+            std::task::Poll::Ready(_) => std::task::Poll::Ready(()),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
     }
 }

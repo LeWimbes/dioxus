@@ -64,6 +64,7 @@ pub const DEVSERVER_PORT_ENV: &str = "DIOXUS_DEVSERVER_PORT";
 pub const ALWAYS_ON_TOP_ENV: &str = "DIOXUS_ALWAYS_ON_TOP";
 pub const ASSET_ROOT_ENV: &str = "DIOXUS_ASSET_ROOT";
 pub const APP_TITLE_ENV: &str = "DIOXUS_APP_TITLE";
+pub const PRODUCT_NAME_ENV: &str = "DIOXUS_PRODUCT_NAME";
 
 #[deprecated(since = "0.6.0", note = "The CLI currently does not set this.")]
 #[doc(hidden)]
@@ -221,6 +222,7 @@ pub fn is_cli_enabled() -> bool {
 /// be served at `http://localhost:8080/dogapp`.
 ///
 /// All assets will be served from this base path as well, ie `http://localhost:8080/dogapp/assets/logo.png`.
+#[allow(unreachable_code)]
 pub fn base_path() -> Option<String> {
     // This may trigger when compiling to the server if you depend on another crate that pulls in
     // the web feature. It might be better for the renderers to provide the current platform
@@ -326,4 +328,9 @@ pub fn build_id() -> u64 {
             .and_then(|s| s.parse().ok())
             .unwrap_or(0)
     }
+}
+
+/// The product name of the bundled application.
+pub fn product_name() -> Option<String> {
+    read_env_config!("DIOXUS_PRODUCT_NAME")
 }

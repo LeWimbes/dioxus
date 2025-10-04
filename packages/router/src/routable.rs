@@ -1,8 +1,7 @@
+#![allow(non_snake_case)]
 //! # Routable
 
-#![allow(non_snake_case)]
-use dioxus_lib::prelude::*;
-
+use dioxus_core::Element;
 use std::iter::FlatMap;
 use std::slice::Iter;
 use std::{fmt::Display, str::FromStr};
@@ -309,6 +308,7 @@ impl<T: ToQueryArgument<M>, M> Display for DisplayQueryArgument<'_, T, M> {
 ///
 /// ```rust
 /// use dioxus::prelude::*;
+/// use dioxus_router::FromHashFragment;
 ///
 /// #[derive(Routable, Clone)]
 /// #[rustfmt::skip]
@@ -476,6 +476,7 @@ fn full_circle() {
 ///
 /// ```rust
 /// use dioxus::prelude::*;
+/// use dioxus_router::{ToRouteSegments, FromRouteSegments};
 ///
 /// #[derive(Routable, Clone, PartialEq, Debug)]
 /// enum Route {
@@ -567,6 +568,7 @@ fn to_route_segments() {
 ///
 /// ```rust
 /// use dioxus::prelude::*;
+/// use dioxus_router::{ToRouteSegments, FromRouteSegments};
 ///
 /// #[derive(Routable, Clone, PartialEq, Debug)]
 /// enum Route {
@@ -736,7 +738,6 @@ pub trait Routable: FromStr<Err: Display> + Display + Clone + 'static {
     ///
     /// # Example
     /// ```rust
-    /// use dioxus_router::prelude::*;
     /// use dioxus::prelude::*;
     ///
     /// #[component]
@@ -804,7 +805,6 @@ pub trait Routable: FromStr<Err: Display> + Display + Clone + 'static {
     ///
     /// # Example
     /// ```rust
-    /// use dioxus_router::prelude::*;
     /// use dioxus::prelude::*;
     ///
     /// #[component]
@@ -953,3 +953,13 @@ impl Display for SegmentType {
         }
     }
 }
+
+// /// Routable is implemented for String to allow stringly-typed apps.
+// impl Routable for String {
+//     const SITE_MAP: &'static [SiteMapSegment] = &[];
+
+//     #[doc = " Render the route at the given level"]
+//     fn render(&self, _level: usize) -> Element {
+//         unimplemented!("String routes cannot be rendered as components")
+//     }
+// }

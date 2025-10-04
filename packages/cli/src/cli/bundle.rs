@@ -1,4 +1,4 @@
-use crate::{AppBuilder, BuildArgs, BuildMode, BuildRequest, Platform};
+use crate::{AppBuilder, BuildArgs, BuildMode, BuildRequest, BundleFormat};
 use anyhow::{bail, Context};
 use path_absolutize::Absolutize;
 use std::collections::HashMap;
@@ -39,7 +39,8 @@ impl Bundle {
 
         let BuildTargets { client, server } = self.args.into_targets().await?;
 
-        AppBuilder::started(&client, BuildMode::Base)?
+        let mut server_artifacts = None;
+        let client_artifacts = AppBuilder::started(&client, BuildMode::Base { run: false })?
             .finish_build()
             .await?;
 
@@ -47,15 +48,17 @@ impl Bundle {
 
         if let Some(server) = server.as_ref() {
             // If the server is present, we need to build it as well
-            AppBuilder::started(server, BuildMode::Base)?
-                .finish_build()
-                .await?;
+            server_artifacts = Some(
+                AppBuilder::started(server, BuildMode::Base { run: false })?
+                    .finish_build()
+                    .await?,
+            );
 
             tracing::info!(path = ?client.root_dir(), "Server build completed successfully! 🚀");
         }
 
         // If we're building for iOS, we need to bundle the iOS bundle
-        if client.platform == Platform::Ios && self.package_types.is_none() {
+        if client.bundle == BundleFormat::Ios && self.package_types.is_none() {
             self.package_types = Some(vec![crate::PackageType::IosBundle]);
         }
 
@@ -67,9 +70,9 @@ impl Bundle {
         }
 
         // Create a list of bundles that we might need to copy
-        match client.platform {
+        match client.bundle {
             // By default, mac/win/linux work with tauri bundle
-            Platform::MacOS | Platform::Linux | Platform::Windows => {
+            BundleFormat::MacOS | BundleFormat::Linux | BundleFormat::Windows => {
                 tracing::info!("Running desktop bundler...");
                 for bundle in Self::bundle_desktop(&client, &self.package_types)? {
                     bundles.extend(bundle.bundle_paths);
@@ -77,15 +80,14 @@ impl Bundle {
             }
 
             // Web/ios can just use their root_dir
-            Platform::Web => bundles.push(client.root_dir()),
-            Platform::Ios => {
+            BundleFormat::Web => bundles.push(client.root_dir()),
+            BundleFormat::Ios => {
                 tracing::warn!("iOS bundles are not currently codesigned! You will need to codesign the app before distributing.");
                 bundles.push(client.root_dir())
             }
-            Platform::Server => bundles.push(client.root_dir()),
-            Platform::Liveview => bundles.push(client.root_dir()),
+            BundleFormat::Server => bundles.push(client.root_dir()),
 
-            Platform::Android => {
+            BundleFormat::Android => {
                 let aab = client
                     .android_gradle_bundle()
                     .await
@@ -135,7 +137,14 @@ impl Bundle {
             );
         }
 
-        Ok(StructuredOutput::BundleOutput { bundles })
+        let client = client_artifacts.into_structured_output();
+        let server = server_artifacts.map(|s| s.into_structured_output());
+
+        Ok(StructuredOutput::BundleOutput {
+            bundles,
+            client,
+            server,
+        })
     }
 
     fn bundle_desktop(
@@ -145,16 +154,16 @@ impl Bundle {
         let krate = &build;
         let exe = build.main_exe();
 
-        _ = std::fs::remove_dir_all(krate.bundle_dir(build.platform));
+        _ = std::fs::remove_dir_all(krate.bundle_dir(build.bundle));
 
         let package = krate.package();
         let mut name: PathBuf = krate.executable_name().into();
         if cfg!(windows) {
             name.set_extension("exe");
         }
-        std::fs::create_dir_all(krate.bundle_dir(build.platform))
+        std::fs::create_dir_all(krate.bundle_dir(build.bundle))
             .context("Failed to create bundle directory")?;
-        std::fs::copy(&exe, krate.bundle_dir(build.platform).join(&name))
+        std::fs::copy(&exe, krate.bundle_dir(build.bundle).join(&name))
             .with_context(|| "Failed to copy the output executable into the bundle directory")?;
 
         let binaries = vec![
@@ -223,7 +232,7 @@ impl Bundle {
         }
 
         let mut settings = SettingsBuilder::new()
-            .project_out_directory(krate.bundle_dir(build.platform))
+            .project_out_directory(krate.bundle_dir(build.bundle))
             .package_settings(PackageSettings {
                 product_name: krate.bundled_app_name(),
                 version: package.version.to_string(),

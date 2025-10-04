@@ -1,4 +1,6 @@
-use dioxus_lib::prelude::*;
+use dioxus_core::{Element, VNode};
+use dioxus_core_macro::{rsx, Props};
+use dioxus_html as dioxus_elements;
 
 use tracing::error;
 
@@ -24,7 +26,6 @@ pub struct HistoryButtonProps {
 /// # Example
 /// ```rust
 /// # use dioxus::prelude::*;
-/// # use dioxus_router::prelude::*;
 /// #[derive(Clone, Routable)]
 /// enum Route {
 ///     #[route("/")]
@@ -97,7 +98,6 @@ pub fn GoBackButton(props: HistoryButtonProps) -> Element {
 /// # Example
 /// ```rust
 /// # use dioxus::prelude::*;
-/// # use dioxus_router::prelude::*;
 /// #[derive(Clone, Routable)]
 /// enum Route {
 ///     #[route("/")]
