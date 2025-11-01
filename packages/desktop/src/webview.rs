@@ -155,16 +155,17 @@ impl WebviewEdits {
             }
             dioxus_html::EventData::Drag(ref drag) => {
                 // we want to override this with a native file engine, provided by the most recent drag event
-                let file_event = hovered_file.current().unwrap();
-                let paths = match file_event {
-                    wry::DragDropEvent::Enter { paths, .. } => paths,
-                    wry::DragDropEvent::Drop { paths, .. } => paths,
+                let file_event = hovered_file.current();
+                let file_paths = match file_event {
+                    Some(wry::DragDropEvent::Enter { paths, .. }) => paths,
+                    Some(wry::DragDropEvent::Drop { paths, .. }) => paths,
                     _ => vec![],
                 };
 
                 Rc::new(PlatformEventData::new(Box::new(DesktopFileDragEvent {
                     mouse: drag.mouse.clone(),
-                    files: paths,
+                    data_transfer: drag.data_transfer.clone(),
+                    files: file_paths,
                 })))
             }
             _ => data.into_any(),
@@ -260,7 +261,14 @@ impl WebviewInstance {
                 asset_handlers,
                 edits
             ];
+
+            #[cfg(feature = "tokio_runtime")]
+            let tokio_rt = tokio::runtime::Handle::current();
+
             move |_id: WebViewId, request, responder: RequestAsyncResponder| {
+                #[cfg(feature = "tokio_runtime")]
+                let _guard = tokio_rt.enter();
+
                 protocol::desktop_handler(
                     request,
                     asset_handlers.clone(),
@@ -381,11 +389,25 @@ impl WebviewInstance {
         }
 
         for (name, handler) in cfg.protocols.drain(..) {
-            webview = webview.with_custom_protocol(name, handler);
+            #[cfg(feature = "tokio_runtime")]
+            let tokio_rt = tokio::runtime::Handle::current();
+
+            webview = webview.with_custom_protocol(name, move |a, b| {
+                #[cfg(feature = "tokio_runtime")]
+                let _guard = tokio_rt.enter();
+                handler(a, b)
+            });
         }
 
         for (name, handler) in cfg.asynchronous_protocols.drain(..) {
-            webview = webview.with_asynchronous_custom_protocol(name, handler);
+            #[cfg(feature = "tokio_runtime")]
+            let tokio_rt = tokio::runtime::Handle::current();
+
+            webview = webview.with_asynchronous_custom_protocol(name, move |a, b, c| {
+                #[cfg(feature = "tokio_runtime")]
+                let _guard = tokio_rt.enter();
+                handler(a, b, c)
+            });
         }
 
         const INITIALIZATION_SCRIPT: &str = r#"

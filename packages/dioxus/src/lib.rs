@@ -9,7 +9,7 @@
 //! - `html`: (default) exports `dioxus-html` as the default elements to use in rsx
 //! - `hooks`: (default) re-exports `dioxus-hooks`
 //! - `hot-reload`: (default) enables hot rsx reloading in all renderers that support it
-//! - `router`: exports the [router](https://dioxuslabs.com/learn/0.6/router) and enables any router features for the current platform
+//! - `router`: exports the [router](https://dioxuslabs.com/learn/0.7/essentials/router/) and enables any router features for the current platform
 //! - `third-party-renderer`: Just disables warnings about no active platform when no renderers are enabled
 //! - `logger`: Enable the default tracing subscriber for Dioxus apps
 //!
@@ -27,7 +27,7 @@
 
 pub use dioxus_core;
 #[doc(inline)]
-pub use dioxus_core::{CapturedError, Error, Ok, Result};
+pub use dioxus_core::{CapturedError, Ok, Result};
 
 #[cfg(feature = "launch")]
 #[cfg_attr(docsrs, doc(cfg(feature = "launch")))]
@@ -205,15 +205,13 @@ pub mod prelude {
     pub use dioxus_fullstack::{
         self as dioxus_fullstack, delete, get, patch, post, put, server, use_loader,
         use_server_cached, use_server_future, HttpError, OrHttpError, ServerFnError,
-        ServerFnResult,
+        ServerFnResult, StatusCode,
     };
 
     #[cfg(feature = "server")]
     #[cfg_attr(docsrs, doc(cfg(feature = "server")))]
     #[doc(inline)]
-    pub use dioxus_server::{
-        self, serve, DioxusRouterExt, DioxusRouterFnExt, ServeConfig, ServerFunction,
-    };
+    pub use dioxus_server::{self, serve, DioxusRouterExt, ServeConfig, ServerFunction};
 
     #[cfg(feature = "router")]
     #[cfg_attr(docsrs, doc(cfg(feature = "router")))]

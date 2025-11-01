@@ -11,8 +11,9 @@ use dioxus_html::{
     point_interaction::{
         InteractionElementOffset, InteractionLocation, ModifiersInteraction, PointerInteraction,
     },
-    FileData, FormValue, HasDragData, HasFileData, HasFormData, HasMouseData, NativeFileData,
-    SerializedFormData, SerializedFormObject, SerializedMouseData, SerializedPointInteraction,
+    FileData, FormValue, HasDataTransferData, HasDragData, HasFileData, HasFormData, HasMouseData,
+    NativeFileData, SerializedDataTransfer, SerializedFormData, SerializedFormObject,
+    SerializedMouseData, SerializedPointInteraction,
 };
 
 use serde::{Deserialize, Serialize};
@@ -234,6 +235,7 @@ impl NativeFileHover {
 #[derive(Clone)]
 pub(crate) struct DesktopFileDragEvent {
     pub mouse: SerializedPointInteraction,
+    pub data_transfer: SerializedDataTransfer,
     pub files: Vec<PathBuf>,
 }
 
@@ -244,6 +246,12 @@ impl HasFileData for DesktopFileDragEvent {
             .cloned()
             .map(|f| FileData::new(DesktopFileData(f)))
             .collect()
+    }
+}
+
+impl HasDataTransferData for DesktopFileDragEvent {
+    fn data_transfer(&self) -> dioxus_html::DataTransfer {
+        dioxus_html::DataTransfer::new(self.data_transfer.clone())
     }
 }
 
@@ -323,7 +331,10 @@ impl NativeFileData for DesktopFileData {
     fn read_bytes(
         &self,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<bytes::Bytes, dioxus_core::Error>> + 'static>,
+        Box<
+            dyn std::future::Future<Output = Result<bytes::Bytes, dioxus_core::CapturedError>>
+                + 'static,
+        >,
     > {
         let path = self.0.clone();
         Box::pin(async move { Ok(bytes::Bytes::from(std::fs::read(&path)?)) })
@@ -332,7 +343,7 @@ impl NativeFileData for DesktopFileData {
     fn read_string(
         &self,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Result<String, dioxus_core::Error>> + 'static>,
+        Box<dyn std::future::Future<Output = Result<String, dioxus_core::CapturedError>> + 'static>,
     > {
         let path = self.0.clone();
         Box::pin(async move { Ok(std::fs::read_to_string(&path)?) })
@@ -350,34 +361,15 @@ impl NativeFileData for DesktopFileData {
         &self,
     ) -> std::pin::Pin<
         Box<
-            dyn futures_util::Stream<Item = Result<bytes::Bytes, dioxus_core::Error>>
+            dyn futures_util::Stream<Item = Result<bytes::Bytes, dioxus_core::CapturedError>>
                 + 'static
                 + Send,
         >,
     > {
         let path = self.0.clone();
-        #[cfg(feature = "tokio_runtime")]
-        {
-            // todo!()
-            // use futures_util::TryFutureExt;
-
-            // futures_util::stream::try_unfold(File::open(path), |mut file| async move {
-            // let mut buf = vec![0; 8192];
-            // let n = file
-            //     .read(&mut buf)
-            //     .await
-            //     .map_err(|e| dioxus_core::Error::from(e))?;
-            // if n == 0 {
-            //     Ok(None)
-            // } else {
-            //     buf.truncate(n);
-            //     Ok(Some((bytes::Bytes::from(buf), file)))
-            // }
-            // })
-            // .map(|res| res.map(bytes::Bytes::from))
-            // .boxed()
-        }
-        todo!()
+        Box::pin(futures_util::stream::once(async move {
+            Ok(bytes::Bytes::from(std::fs::read(&path)?))
+        }))
     }
 
     fn content_type(&self) -> Option<String> {
@@ -389,3 +381,5 @@ impl NativeFileData for DesktopFileData {
         )
     }
 }
+
+pub struct DesktopDataTransfer {}

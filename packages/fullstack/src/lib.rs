@@ -52,6 +52,9 @@ mod client;
 pub use client::*;
 
 pub use axum::extract::Json;
+pub use axum::response::{NoContent, Redirect};
+
+pub use crate::request::{FromResponse, FromResponseParts};
 
 pub use payloads::*;
 pub mod payloads {
@@ -103,6 +106,9 @@ pub mod payloads {
 
     pub mod header;
     pub use header::*;
+
+    pub mod query;
+    pub use query::*;
 
     #[cfg(feature = "ws")]
     pub mod websocket;

@@ -15,7 +15,7 @@
 [discord-url]: https://discord.gg/XgGxMSkvUM
 
 [Website](https://dioxuslabs.com) |
-[Guides](https://dioxuslabs.com/learn/0.6/) |
+[Guides](https://dioxuslabs.com/learn/0.7/) |
 [API Docs](https://docs.rs/dioxus-fullstack/latest/dioxus_fullstack/) |
 [Chat](https://discord.gg/XgGxMSkvUM)
 
@@ -79,6 +79,8 @@ use dioxus::prelude::*;
 #[cfg(feature = "server")]
 #[tokio::main]
 async fn main() {
+    use dioxus_server::DioxusRouterExt;
+
     // Get the address the server should run on. If the CLI is running, the CLI proxies fullstack into the main address
     // and we use the generated address the CLI gives us
     let address = dioxus::cli_config::fullstack_address_or_localhost();
@@ -87,7 +89,7 @@ async fn main() {
     let router = axum::Router::new()
         // You can add a dioxus application to the router with the `serve_dioxus_application` method
         // This will add a fallback route to the router that will serve your component and server functions
-        .serve_dioxus_application(dioxus::server::ServeConfig::new().unwrap(), App);
+        .serve_dioxus_application(dioxus_server::ServeConfig::new(), App);
 
     // Finally, we can launch the server
     let router = router.into_make_service();
@@ -126,7 +128,7 @@ async fn get_meaning(of: String) -> ServerFnResult<Option<u32>> {
 
 ## Getting Started
 
-To get started with full stack Dioxus, check out our [getting started guide](https://dioxuslabs.com/learn/0.6/getting_started), or the [full stack examples](https://github.com/DioxusLabs/dioxus/tree/master/examples).
+To get started with full stack Dioxus, check out our [getting started guide](https://dioxuslabs.com/learn/0.7/getting_started), or the [full stack examples](https://github.com/DioxusLabs/dioxus/tree/master/examples).
 
 ## Contributing
 

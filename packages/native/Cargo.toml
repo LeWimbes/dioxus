@@ -6,18 +6,18 @@ edition = "2021"
 description = "Native renderer for Dioxus based on blitz"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DioxusLabs/dioxus/"
-homepage = "https://dioxuslabs.com/learn/0.6/getting_started"
+homepage = "https://dioxuslabs.com/learn/0.7/getting_started"
 keywords = ["dom", "ui", "gui", "react"]
 
 [features]
-default = ["accessibility", "hot-reload", "tracing", "net", "html", "svg", "system-fonts", "clipboard", "file_dialog"]
+default = ["accessibility", "hot-reload", "net", "html", "svg", "system-fonts", "clipboard", "file_dialog"]
 clipboard = ["blitz-shell/clipboard"]
 file_dialog = ["blitz-shell/file_dialog"]
 svg = ["blitz-dom/svg", "blitz-paint/svg"]
 net = ["dep:tokio", "dep:blitz-net"]
 html = ["dep:blitz-html"]
 accessibility = ["blitz-shell/accessibility", "blitz-dom/accessibility"]
-tracing = ["dep:tracing", "blitz-shell/tracing", "blitz-dom/tracing"]
+tracing = ["dep:tracing", "dioxus-native-dom/tracing", "blitz-shell/tracing", "blitz-dom/tracing"]
 hot-reload = ["dep:dioxus-cli-config", "dep:dioxus-devtools"]
 system-fonts = ["blitz-dom/system_fonts"]
 autofocus = []
@@ -58,4 +58,3 @@ futures-util = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]

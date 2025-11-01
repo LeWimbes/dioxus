@@ -61,7 +61,7 @@ use {
 pub fn use_websocket<
     In: 'static,
     Out: 'static,
-    E: Into<dioxus_core::Error> + 'static,
+    E: Into<CapturedError> + 'static,
     F: Future<Output = Result<Websocket<In, Out, Enc>, E>> + 'static,
     Enc: Encoding,
 >(
@@ -72,7 +72,7 @@ pub fn use_websocket<
     let status_read = use_hook(|| ReadSignal::new(status));
 
     let connection = use_resource(move || {
-        let connection = connect_to_websocket().map_err(|e| CapturedError::from(e.into()));
+        let connection = connect_to_websocket().map_err(|e| e.into());
         async move {
             let connection = connection.await;
 
@@ -233,6 +233,20 @@ impl<In, Out, E> UseWebsocket<In, Out, E> {
         result
     }
 
+    /// Set the WebSocket connection.
+    ///
+    /// This method takes a `Result<Websocket<In, Out, E>, Err>`, allowing you to drive the connection
+    /// into an errored state manually.
+    pub fn set<Err: Into<CapturedError>>(&mut self, socket: Result<Websocket<In, Out, E>, Err>) {
+        match socket {
+            Ok(_) => self.status.set(WebsocketState::Open),
+            Err(_) => self.status.set(WebsocketState::FailedToConnect),
+        }
+
+        self.connection.set(Some(socket.map_err(|e| e.into())));
+        self.waker.wake(());
+    }
+
     /// Mark the WebSocket as closed. This is called internally when the connection is closed.
     fn received_shutdown(&self) {
         let mut _self = *self;
@@ -293,11 +307,11 @@ impl<I, O, E> Websocket<I, O, E> {
             match msg {
                 Message::Text(text) => {
                     let e: O =
-                        E::from_bytes(text.into()).ok_or_else(WebsocketError::deserialization)?;
+                        E::decode(text.into()).ok_or_else(WebsocketError::deserialization)?;
                     return Ok(e);
                 }
                 Message::Binary(bytes) => {
-                    let e: O = E::from_bytes(bytes).ok_or_else(WebsocketError::deserialization)?;
+                    let e: O = E::decode(bytes).ok_or_else(WebsocketError::deserialization)?;
                     return Ok(e);
                 }
                 Message::Close { code, reason } => {
@@ -693,13 +707,12 @@ impl<In: DeserializeOwned, Out: Serialize, E: Encoding> TypedWebsocket<In, Out, 
             match res {
                 Ok(res) => match res {
                     AxumMessage::Text(utf8_bytes) => {
-                        let e: In = E::from_bytes(utf8_bytes.into())
+                        let e: In = E::decode(utf8_bytes.into())
                             .ok_or_else(WebsocketError::deserialization)?;
                         return Ok(e);
                     }
                     AxumMessage::Binary(bytes) => {
-                        let e: In =
-                            E::from_bytes(bytes).ok_or_else(WebsocketError::deserialization)?;
+                        let e: In = E::decode(bytes).ok_or_else(WebsocketError::deserialization)?;
                         return Ok(e);
                     }
 
